@@ -1,0 +1,8 @@
+module(
+    name = "metadata_repo",
+    version = "",  # Automatically updated by release pipeline.
+    bazel_compatibility = [">=8.0.0"],
+)
+
+bazel_dep(name = "package_metadata", version = "0.0.13")
+bazel_dep(name = "rules_java", version = "9.9.0")

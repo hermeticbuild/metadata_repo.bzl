@@ -1,0 +1,5 @@
+bazel-*
+.bazelbsp/
+.idea/
+.ijwb/
+*.swp

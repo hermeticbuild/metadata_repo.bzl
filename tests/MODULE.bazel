@@ -1,0 +1,342 @@
+module(name = "metadata_repo_tests")
+
+bazel_dep(name = "metadata_repo")
+bazel_dep(name = "package_metadata", version = "0.0.13")
+bazel_dep(name = "supply_chain_tools", version = "0.0.1")
+bazel_dep(name = "supply-chain-go", version = "0.0.6")
+bazel_dep(name = "bazel_skylib", version = "1.8.2")
+bazel_dep(name = "rules_java", version = "9.9.0")
+bazel_dep(name = "rules_shell", version = "0.6.1")
+bazel_dep(name = "llvm", version = "0.8.25")
+
+register_toolchains("@llvm//toolchain:all")
+
+local_path_override(
+    module_name = "metadata_repo",
+    path = "../",
+)
+
+# The SBOM tooling and the integrity() rule are not released yet.
+SUPPLY_CHAIN_COMMIT = "df3e61f82ee285763f3ed5cbfc0fab1fedd976ec"
+
+git_override(
+    module_name = "package_metadata",
+    commit = SUPPLY_CHAIN_COMMIT,
+    remote = "https://github.com/bazel-contrib/supply-chain",
+    strip_prefix = "metadata",
+)
+
+git_override(
+    module_name = "supply_chain_tools",
+    commit = SUPPLY_CHAIN_COMMIT,
+    remote = "https://github.com/bazel-contrib/supply-chain",
+    strip_prefix = "tools",
+)
+
+git_override(
+    module_name = "supply-chain-go",
+    commit = SUPPLY_CHAIN_COMMIT,
+    remote = "https://github.com/bazel-contrib/supply-chain",
+    strip_prefix = "lib/supplychain-go",
+)
+
+ours_archive = use_repo_rule("@metadata_repo//:defs.bzl", "http_archive")
+
+ours_file = use_repo_rule("@metadata_repo//:defs.bzl", "http_file")
+
+ours_jar = use_repo_rule("@metadata_repo//:defs.bzl", "http_jar")
+
+ours_git = use_repo_rule("@metadata_repo//:defs.bzl", "git_repository")
+
+native_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+native_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
+
+native_jar = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_jar")
+
+native_git = use_repo_rule("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
+
+BUILD_FILE_CONTENT = """
+exports_files(glob(["**"], exclude = ["BUILD.bazel", "REPO.bazel", "WORKSPACE"]))
+
+filegroup(
+    name = "srcs",
+    srcs = glob(["**"], exclude = ["BUILD.bazel", "REPO.bazel", "WORKSPACE"]),
+    visibility = ["//visibility:public"],
+)
+"""
+
+ZLIB_VERSION = "1.3.1"
+
+ZLIB_TGZ_SHA256 = "9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23"
+
+ZLIB_TGZ_URL = "https://github.com/madler/zlib/releases/download/v{version}/zlib-{version}.tar.gz"
+
+ZLIB_ZIP_SHA256 = "50b24b47bf19e1f35d2a21ff36d2a366638cdf958219a66f30ce0861201760e6"
+
+ZLIB_ZIP_SRI = "sha256-ULJLR78Z4fNdKiH/NtKjZmOM35WCGaZvMM4IYSAXYOY="
+
+ZLIB_ZIP_URL = "https://github.com/madler/zlib/archive/refs/tags/v1.3.1.zip"
+
+SKYLIB_URL = "https://github.com/bazelbuild/bazel-skylib/releases/download/1.8.2/bazel-skylib-1.8.2.tar.gz"
+
+SKYLIB_SHA256 = "6e78f0e57de26801f6f564fa7c4a48dc8b36873e416257a92bbb0937eeac8446"
+
+SKYLIB_SRI512 = "sha512-nQx9kisA9gQRZ33/yFEmMHoMrMbouPbzRatsN3b45SuFoujfqrU8IGQzMW3s6GCrgkzuE9Cct+AXMrVTjJx+hw=="
+
+LICENSE_URL = "https://raw.githubusercontent.com/madler/zlib/v1.3.1/LICENSE"
+
+LICENSE_SHA256 = "845efc77857d485d91fb3e0b884aaa929368c717ae8186b66fe1ed2495753243"
+
+LICENSE_SRI = "sha256-hF78d4V9SF2R+z4LiEqqkpNoxxeugYa2b+HtJJV1MkM="
+
+JAR_URL = "https://repo1.maven.org/maven2/com/google/guava/failureaccess/1.0.2/failureaccess-1.0.2.jar"
+
+JAR_SHA256 = "8a8f81cf9b359e3f6dfa691a1e776985c061ef2f223c9b2c80753e1b458e8064"
+
+JAR_SRI = "sha256-io+Bz5s1nj9t+mkaHndphcBh7y8iPJssgHU+G0WOgGQ="
+
+SKYLIB_COMMIT = "bce8d7f8de2e48033e771f9ccdd721edf9df84e8"
+
+# ---- http_archive: our rule, with the native twin used for comparison ----
+
+# tar.gz + sha256 + strip_prefix + URL tokens
+ours_archive(
+    name = "zlib",
+    build_file_content = BUILD_FILE_CONTENT,
+    purl_pattern = "pkg:generic/zlib@{version}",
+    sha256 = ZLIB_TGZ_SHA256,
+    strip_prefix = "zlib-{version}",
+    url = ZLIB_TGZ_URL,
+    version = ZLIB_VERSION,
+)
+
+native_archive(
+    name = "zlib_native",
+    build_file_content = BUILD_FILE_CONTENT,
+    sha256 = ZLIB_TGZ_SHA256,
+    strip_prefix = "zlib-" + ZLIB_VERSION,
+    url = ZLIB_TGZ_URL.format(version = ZLIB_VERSION),
+)
+
+# zip + SRI integrity + urls list with a failing mirror first + explicit type
+ours_archive(
+    name = "zlib_zip",
+    build_file_content = BUILD_FILE_CONTENT,
+    integrity = ZLIB_ZIP_SRI,
+    purl_pattern = "pkg:github/madler/zlib@v{version}",
+    strip_prefix = "zlib-1.3.1",
+    type = "zip",
+    urls = [
+        "https://invalid.example.invalid/zlib.zip",
+        ZLIB_ZIP_URL,
+    ],
+    version = ZLIB_VERSION,
+)
+
+native_archive(
+    name = "zlib_zip_native",
+    build_file_content = BUILD_FILE_CONTENT,
+    integrity = ZLIB_ZIP_SRI,
+    strip_prefix = "zlib-1.3.1",
+    type = "zip",
+    urls = [
+        "https://invalid.example.invalid/zlib.zip",
+        ZLIB_ZIP_URL,
+    ],
+)
+
+# strip_components + add_prefix
+ours_archive(
+    name = "zlib_components",
+    add_prefix = "vendor",
+    build_file_content = BUILD_FILE_CONTENT,
+    purl_pattern = "pkg:generic/zlib@{version}",
+    sha256 = ZLIB_TGZ_SHA256,
+    strip_components = 1,
+    url = ZLIB_TGZ_URL,
+    version = ZLIB_VERSION,
+)
+
+native_archive(
+    name = "zlib_components_native",
+    add_prefix = "vendor",
+    build_file_content = BUILD_FILE_CONTENT,
+    sha256 = ZLIB_TGZ_SHA256,
+    strip_components = 1,
+    url = ZLIB_TGZ_URL.format(version = ZLIB_VERSION),
+)
+
+# patches + patch_strip + patch_cmds
+ours_archive(
+    name = "zlib_patched",
+    build_file_content = BUILD_FILE_CONTENT,
+    patch_cmds = ["echo patched > PATCHED.txt"],
+    patch_strip = 1,
+    patches = ["//patches:zlib-readme.patch"],
+    purl_pattern = "pkg:generic/zlib@{version}",
+    sha256 = ZLIB_TGZ_SHA256,
+    strip_prefix = "zlib-{version}",
+    url = ZLIB_TGZ_URL,
+    version = ZLIB_VERSION,
+)
+
+native_archive(
+    name = "zlib_patched_native",
+    build_file_content = BUILD_FILE_CONTENT,
+    patch_args = ["-p1"],
+    patch_cmds = ["echo patched > PATCHED.txt"],
+    patches = ["//patches:zlib-readme.patch"],
+    sha256 = ZLIB_TGZ_SHA256,
+    strip_prefix = "zlib-" + ZLIB_VERSION,
+    url = ZLIB_TGZ_URL.format(version = ZLIB_VERSION),
+)
+
+# sha512 integrity, no top-level directory, build_file label
+ours_archive(
+    name = "skylib",
+    build_file = "//build_files:exports.BUILD",
+    integrity = SKYLIB_SRI512,
+    purl_pattern = "pkg:github/bazelbuild/bazel-skylib@1.8.2",
+    url = SKYLIB_URL,
+)
+
+native_archive(
+    name = "skylib_native",
+    build_file = "//build_files:exports.BUILD",
+    integrity = SKYLIB_SRI512,
+    url = SKYLIB_URL,
+)
+
+# PURL options: qualifiers, repository_url, overrides and substitutions
+ours_archive(
+    name = "skylib_purl",
+    build_file_content = BUILD_FILE_CONTENT,
+    download_url = "https://mirror.example.com/skylib.tar.gz",
+    file_name = "custom-name.tgz",
+    purl_pattern = "pkg:github/{owner}/{repo}@{version}",
+    qualifiers = {"arch": "any"},
+    repository_url = "https://repo.example.com/{owner}",
+    sha256 = SKYLIB_SHA256,
+    substitutions = {
+        "{owner}": "bazelbuild",
+        "{repo}": "bazel-skylib",
+    },
+    url = SKYLIB_URL,
+    version = "1.8.2",
+)
+
+# vers qualifier without a version component
+ours_archive(
+    name = "skylib_vers",
+    build_file_content = BUILD_FILE_CONTENT,
+    purl_pattern = "pkg:generic/skylib",
+    sha256 = SKYLIB_SHA256,
+    url = SKYLIB_URL,
+    vers = "vers:semver/>=1.8.0|<2.0.0",
+)
+
+# files overlay: only supported by our rule
+ours_archive(
+    name = "zlib_files",
+    build_file_content = BUILD_FILE_CONTENT,
+    files = {"OVERLAY.txt": "//overlay:OVERLAY.txt"},
+    purl_pattern = "pkg:generic/zlib@{version}",
+    sha256 = ZLIB_TGZ_SHA256,
+    strip_prefix = "zlib-{version}",
+    url = ZLIB_TGZ_URL,
+    version = ZLIB_VERSION,
+)
+
+# ---- http_file ----
+
+ours_file(
+    name = "license",
+    downloaded_file_path = "docs/LICENSE.txt",
+    executable = True,
+    purl_pattern = "pkg:generic/zlib-license@1.3.1",
+    sha256 = LICENSE_SHA256,
+    url = LICENSE_URL,
+)
+
+native_file(
+    name = "license_native",
+    downloaded_file_path = "docs/LICENSE.txt",
+    executable = True,
+    sha256 = LICENSE_SHA256,
+    url = LICENSE_URL,
+)
+
+# SRI integrity and the default downloaded_file_path
+ours_file(
+    name = "license_default",
+    integrity = LICENSE_SRI,
+    purl_pattern = "pkg:generic/zlib-license@1.3.1",
+    url = LICENSE_URL,
+)
+
+native_file(
+    name = "license_default_native",
+    integrity = LICENSE_SRI,
+    url = LICENSE_URL,
+)
+
+# ---- http_jar ----
+
+ours_jar(
+    name = "failureaccess",
+    purl_pattern = "pkg:maven/com.google.guava/failureaccess@1.0.2",
+    sha256 = JAR_SHA256,
+    url = JAR_URL,
+)
+
+native_jar(
+    name = "failureaccess_native",
+    sha256 = JAR_SHA256,
+    url = JAR_URL,
+)
+
+# ---- git_repository ----
+
+ours_git(
+    name = "git_commit",
+    build_file_content = BUILD_FILE_CONTENT,
+    commit = SKYLIB_COMMIT,
+    purl_pattern = "pkg:github/bazelbuild/bazel-skylib@{commit}",
+    remote = "https://github.com/bazelbuild/bazel-skylib.git",
+)
+
+native_git(
+    name = "git_commit_native",
+    build_file_content = BUILD_FILE_CONTENT,
+    commit = SKYLIB_COMMIT,
+    remote = "https://github.com/bazelbuild/bazel-skylib.git",
+)
+
+ours_git(
+    name = "git_tag",
+    build_file_content = BUILD_FILE_CONTENT,
+    purl_pattern = "pkg:github/bazelbuild/bazel-skylib@{version}",
+    remote = "https://github.com/bazelbuild/bazel-skylib.git",
+    tag = "{version}",
+    version = "1.8.2",
+)
+
+native_git(
+    name = "git_tag_native",
+    build_file_content = BUILD_FILE_CONTENT,
+    remote = "https://github.com/bazelbuild/bazel-skylib.git",
+    tag = "1.8.2",
+)
+
+# license attribute: the license target is appended to default_package_metadata
+ours_archive(
+    name = "zlib_licensed",
+    build_file_content = BUILD_FILE_CONTENT,
+    license = "//:zlib_license",
+    purl_pattern = "pkg:generic/zlib@{version}",
+    sha256 = ZLIB_TGZ_SHA256,
+    strip_prefix = "zlib-{version}",
+    url = ZLIB_TGZ_URL,
+    version = ZLIB_VERSION,
+)

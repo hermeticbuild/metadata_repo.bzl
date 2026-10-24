@@ -1,0 +1,320 @@
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
+load("@bazel_skylib//rules:diff_test.bzl", "diff_test")
+load("@package_metadata//licenses:defs.bzl", "license")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("@supply_chain_tools//sbom:cyclonedx.bzl", "cyclonedx")
+load("@supply_chain_tools//sbom:sbom.bzl", "sbom")
+load("@supply_chain_tools//sbom:spdx.bzl", "spdx")
+load(":defs.bzl", "compat_test", "metadata_test", "tree_listing")
+
+ZLIB_TGZ_SHA256 = "9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23"
+ZLIB_TGZ_SRI = "sha256-mpOyt9/ax3zrpaVYpYDnRmfdb+3kWFuR7vtg8Dty3yM="
+ZLIB_ZIP_SRI = "sha256-ULJLR78Z4fNdKiH/NtKjZmOM35WCGaZvMM4IYSAXYOY="
+SKYLIB_SHA256 = "6e78f0e57de26801f6f564fa7c4a48dc8b36873e416257a92bbb0937eeac8446"
+SKYLIB_SRI256 = "sha256-bnjw5X3iaAH29WT6fEpI3Is2hz5BYlepK7sJN+6shEY="
+SKYLIB_SRI512 = "sha512-nQx9kisA9gQRZ33/yFEmMHoMrMbouPbzRatsN3b45SuFoujfqrU8IGQzMW3s6GCrgkzuE9Cct+AXMrVTjJx+hw=="
+LICENSE_SHA256 = "845efc77857d485d91fb3e0b884aaa929368c717ae8186b66fe1ed2495753243"
+LICENSE_SRI = "sha256-hF78d4V9SF2R+z4LiEqqkpNoxxeugYa2b+HtJJV1MkM="
+JAR_SHA256 = "8a8f81cf9b359e3f6dfa691a1e776985c061ef2f223c9b2c80753e1b458e8064"
+JAR_SRI = "sha256-io+Bz5s1nj9t+mkaHndphcBh7y8iPJssgHU+G0WOgGQ="
+SKYLIB_COMMIT = "bce8d7f8de2e48033e771f9ccdd721edf9df84e8"
+SKYLIB_VCS = "vcs_url=git%2Bhttps:%2F%2Fgithub.com%2Fbazelbuild%2Fbazel-skylib.git%40" + SKYLIB_COMMIT
+
+# ---- PURL, checksum and integrity generation ----
+
+metadata_test(
+    name = "zlib_tgz_metadata_test",
+    repo = "zlib",
+    expect = [
+        "pkg:generic/zlib@1.3.1?checksum=sha256:" + ZLIB_TGZ_SHA256,
+        "download_url=https:%2F%2Fgithub.com%2Fmadler%2Fzlib%2Freleases%2Fdownload%2Fv1.3.1%2Fzlib-1.3.1.tar.gz",
+        "file_name=zlib-1.3.1.tar.gz",
+        # sha256 given as hex is also exposed as an SRI integrity value
+        ZLIB_TGZ_SRI,
+    ],
+)
+
+metadata_test(
+    name = "zlib_zip_metadata_test",
+    repo = "zlib_zip",
+    expect = [
+        "pkg:github/madler/zlib@v1.3.1?checksum=sha256:50b24b47bf19e1f35d2a21ff36d2a366638cdf958219a66f30ce0861201760e6",
+        ZLIB_ZIP_SRI,
+    ],
+)
+
+metadata_test(
+    name = "skylib_sha512_metadata_test",
+    repo = "skylib",
+    expect = [
+        "pkg:github/bazelbuild/bazel-skylib@1.8.2?checksum=sha512:9d0c7d922b00f60411677dffc85126307a0cacc6e8b8f6f345ab6c3776f8e52b85a2e8dfaab53c206433316dece860ab824cee13d09cb7e01732b5538c9c7e87",
+        SKYLIB_SRI512,
+        "!sha256",
+    ],
+)
+
+metadata_test(
+    name = "skylib_purl_options_metadata_test",
+    repo = "skylib_purl",
+    expect = [
+        "pkg:github/bazelbuild/bazel-skylib@1.8.2?arch=any&checksum=sha256:" + SKYLIB_SHA256,
+        "download_url=https:%2F%2Fmirror.example.com%2Fskylib.tar.gz",
+        "file_name=custom-name.tgz",
+        "repository_url=https:%2F%2Frepo.example.com%2Fbazelbuild",
+        SKYLIB_SRI256,
+    ],
+)
+
+metadata_test(
+    name = "skylib_vers_metadata_test",
+    repo = "skylib_vers",
+    expect = [
+        "pkg:generic/skylib?checksum=sha256:" + SKYLIB_SHA256,
+        "vers=vers:semver%2F%3E%3D1.8.0%7C%3C2.0.0",
+        # no version component when vers is used
+        "!skylib@",
+    ],
+)
+
+metadata_test(
+    name = "http_file_metadata_test",
+    repo = "license",
+    expect = [
+        "pkg:generic/zlib-license@1.3.1?checksum=sha256:" + LICENSE_SHA256,
+        "download_url=https:%2F%2Fraw.githubusercontent.com%2Fmadler%2Fzlib%2Fv1.3.1%2FLICENSE",
+        LICENSE_SRI,
+    ],
+)
+
+metadata_test(
+    name = "http_file_integrity_metadata_test",
+    repo = "license_default",
+    expect = [
+        # SRI input is also exposed as a hex checksum qualifier
+        "checksum=sha256:" + LICENSE_SHA256,
+        LICENSE_SRI,
+    ],
+)
+
+metadata_test(
+    name = "http_jar_metadata_test",
+    repo = "failureaccess",
+    expect = [
+        "pkg:maven/com.google.guava/failureaccess@1.0.2?checksum=sha256:" + JAR_SHA256,
+        "file_name=failureaccess-1.0.2.jar",
+        JAR_SRI,
+    ],
+)
+
+metadata_test(
+    name = "git_commit_metadata_test",
+    repo = "git_commit",
+    integrity = False,
+    expect = [
+        "pkg:github/bazelbuild/bazel-skylib@" + SKYLIB_COMMIT + "?" + SKYLIB_VCS,
+    ],
+)
+
+metadata_test(
+    name = "git_tag_metadata_test",
+    repo = "git_tag",
+    integrity = False,
+    expect = [
+        # the tag is resolved to the commit in vcs_url
+        "pkg:github/bazelbuild/bazel-skylib@1.8.2?" + SKYLIB_VCS,
+    ],
+)
+
+# ---- Compatibility with the Bazel built-in repository rules ----
+
+compat_test(
+    name = "http_archive_tgz_compat_test",
+    native_repo = "zlib_native",
+    ours = "zlib",
+)
+
+compat_test(
+    name = "http_archive_zip_compat_test",
+    native_repo = "zlib_zip_native",
+    ours = "zlib_zip",
+)
+
+compat_test(
+    name = "http_archive_strip_components_compat_test",
+    native_repo = "zlib_components_native",
+    ours = "zlib_components",
+)
+
+compat_test(
+    name = "http_archive_patches_compat_test",
+    native_repo = "zlib_patched_native",
+    ours = "zlib_patched",
+)
+
+compat_test(
+    name = "http_archive_build_file_compat_test",
+    native_repo = "skylib_native",
+    ours = "skylib",
+)
+
+compat_test(
+    name = "git_repository_commit_compat_test",
+    native_repo = "git_commit_native",
+    ours = "git_commit",
+)
+
+compat_test(
+    name = "git_repository_tag_compat_test",
+    native_repo = "git_tag_native",
+    ours = "git_tag",
+)
+
+diff_test(
+    name = "http_file_compat_test",
+    file1 = "@license//file",
+    file2 = "@license_native//file",
+)
+
+diff_test(
+    name = "http_file_default_path_compat_test",
+    file1 = "@license_default//file:downloaded",
+    file2 = "@license_default_native//file:downloaded",
+)
+
+diff_test(
+    name = "http_jar_compat_test",
+    file1 = "@failureaccess//jar:file",
+    file2 = "@failureaccess_native//jar:file",
+)
+
+build_test(
+    name = "http_jar_targets_build_test",
+    targets = [
+        "@failureaccess//jar",
+        "@failureaccess_native//jar",
+    ],
+)
+
+# ---- Attributes only available on our rules ----
+
+tree_listing(
+    name = "zlib_files_listing",
+    srcs = ["@zlib_files//:srcs"],
+)
+
+sh_test(
+    name = "http_archive_files_test",
+    srcs = ["assert_contains.sh"],
+    args = [
+        "$(rlocationpath :zlib_files_listing)",
+        "--",
+        "OVERLAY.txt ",
+        "zlib.h ",
+    ],
+    data = [":zlib_files_listing"],
+)
+
+tree_listing(
+    name = "zlib_patched_listing",
+    srcs = ["@zlib_patched//:srcs"],
+)
+
+sh_test(
+    name = "http_archive_patch_cmds_test",
+    srcs = ["assert_contains.sh"],
+    args = [
+        "$(rlocationpath :zlib_patched_listing)",
+        "--",
+        "PATCHED.txt ",
+    ],
+    data = [":zlib_patched_listing"],
+)
+
+# ---- SBOM generation ----
+
+# The SBOM aspect only collects metadata from rule targets (applicable_licenses),
+# not from source files, so the repos are referenced through filegroups/java_import.
+filegroup(
+    name = "all_external",
+    srcs = [
+        "@failureaccess//jar",
+        "@git_commit//:srcs",
+        "@license//file",
+        "@skylib//:srcs",
+        "@zlib//:srcs",
+        "@zlib_zip//:srcs",
+    ],
+)
+
+sbom(
+    name = "all_sbom",
+    require_root_metadata = False,
+    target = ":all_external",
+)
+
+cyclonedx(
+    name = "all_cyclonedx",
+    sbom = ":all_sbom",
+)
+
+spdx(
+    name = "all_spdx",
+    sbom = ":all_sbom",
+)
+
+sh_test(
+    name = "cyclonedx_sbom_test",
+    srcs = ["assert_contains.sh"],
+    args = [
+        "$(rlocationpath :all_cyclonedx)",
+        "--",
+        "pkg:generic/zlib@1.3.1",
+        "pkg:github/madler/zlib@v1.3.1",
+        "pkg:github/bazelbuild/bazel-skylib@1.8.2",
+        "pkg:github/bazelbuild/bazel-skylib@" + SKYLIB_COMMIT,
+        "pkg:generic/zlib-license@1.3.1",
+        "pkg:maven/com.google.guava/failureaccess@1.0.2",
+    ],
+    data = [":all_cyclonedx"],
+)
+
+sh_test(
+    name = "spdx_sbom_test",
+    srcs = ["assert_contains.sh"],
+    args = [
+        "$(rlocationpath :all_spdx)",
+        "--",
+        "pkg:generic/zlib@1.3.1",
+        "pkg:github/madler/zlib@v1.3.1",
+        "pkg:github/bazelbuild/bazel-skylib@1.8.2",
+        "pkg:maven/com.google.guava/failureaccess@1.0.2",
+    ],
+    data = [":all_spdx"],
+)
+
+# ---- license attribute ----
+
+license(
+    name = "zlib_license",
+    kind = "@package_metadata//licenses/spdx:Zlib",
+    visibility = ["//visibility:public"],
+)
+
+sh_test(
+    name = "license_attribute_test",
+    srcs = ["assert_contains.sh"],
+    args = [
+        "$(rlocationpath @zlib_licensed//:package_metadata)",
+        "$(rlocationpath :zlib_license)",
+        "--",
+        "pkg:generic/zlib@1.3.1",
+        "build.bazel.attribute.integrity",
+        "build.bazel.attribute.license",
+        # license attribute file content
+        "@@//:zlib_license",
+    ],
+    data = [
+        ":zlib_license",
+        "@zlib_licensed//:package_metadata",
+    ],
+)
