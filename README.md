@@ -1,4 +1,4 @@
-# metadata_repo
+# metadata_repo.bzl
 
 Drop-in replacements for Bazel's built-in `http_archive`, `http_file`, `http_jar`
 and `git_repository` repository rules additionally generating
@@ -6,10 +6,10 @@ and `git_repository` repository rules additionally generating
 external dependencies show up in SBOMs.
 
 ```starlark
-bazel_dep(name = "metadata_repo", version = "...")
+bazel_dep(name = "metadata_repo.bzl", version = "...")
 bazel_dep(name = "package_metadata", version = "...")  # the generated BUILD files load it
 
-http_archive = use_repo_rule("@metadata_repo//:defs.bzl", "http_archive")
+http_archive = use_repo_rule("@metadata_repo.bzl", "http_archive")
 
 http_archive(
     name = "zlib",

@@ -1,5 +1,5 @@
 module(
-    name = "metadata_repo",
+    name = "metadata_repo.bzl",
     version = "",  # Automatically updated by release pipeline.
     bazel_compatibility = [">=8.0.0"],
 )

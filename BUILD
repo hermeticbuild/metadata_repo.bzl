@@ -3,7 +3,7 @@ package(
 )
 
 exports_files([
-    "defs.bzl",
+    "metadata_repo.bzl",
 ])
 
 filegroup(
@@ -11,7 +11,7 @@ filegroup(
     srcs = [
         "BUILD",
         "MODULE.bazel",
-        "defs.bzl",
+        "metadata_repo.bzl",
     ] + [
         "//private:srcs",
     ],

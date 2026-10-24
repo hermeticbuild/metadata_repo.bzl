@@ -1,6 +1,6 @@
 module(name = "metadata_repo_tests")
 
-bazel_dep(name = "metadata_repo")
+bazel_dep(name = "metadata_repo.bzl")
 bazel_dep(name = "package_metadata", version = "0.0.13")
 bazel_dep(name = "supply_chain_tools", version = "0.0.1")
 bazel_dep(name = "supply-chain-go", version = "0.0.6")
@@ -12,7 +12,7 @@ bazel_dep(name = "llvm", version = "0.8.25")
 register_toolchains("@llvm//toolchain:all")
 
 local_path_override(
-    module_name = "metadata_repo",
+    module_name = "metadata_repo.bzl",
     path = "../",
 )
 
@@ -40,13 +40,13 @@ git_override(
     strip_prefix = "lib/supplychain-go",
 )
 
-ours_archive = use_repo_rule("@metadata_repo//:defs.bzl", "http_archive")
+ours_archive = use_repo_rule("@metadata_repo.bzl", "http_archive")
 
-ours_file = use_repo_rule("@metadata_repo//:defs.bzl", "http_file")
+ours_file = use_repo_rule("@metadata_repo.bzl", "http_file")
 
-ours_jar = use_repo_rule("@metadata_repo//:defs.bzl", "http_jar")
+ours_jar = use_repo_rule("@metadata_repo.bzl", "http_jar")
 
-ours_git = use_repo_rule("@metadata_repo//:defs.bzl", "git_repository")
+ours_git = use_repo_rule("@metadata_repo.bzl", "git_repository")
 
 native_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
