@@ -1,1 +1,3 @@
 import %workspace%/../.bazelrc.shared
+# Validate generated SBOMs with the upstream CycloneDX and SPDX tools
+common --@supply_chain_tools//sbom:strict_validations

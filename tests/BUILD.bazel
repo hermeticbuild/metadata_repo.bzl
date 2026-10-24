@@ -1,5 +1,6 @@
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:diff_test.bzl", "diff_test")
+load("@package_metadata//:defs.bzl", "package_metadata")
 load("@package_metadata//licenses:defs.bzl", "license")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("@supply_chain_tools//sbom:cyclonedx.bzl", "cyclonedx")
@@ -232,8 +233,14 @@ sh_test(
 
 # The SBOM aspect only collects metadata from rule targets (applicable_licenses),
 # not from source files, so the repos are referenced through filegroups/java_import.
+package_metadata(
+    name = "tests_metadata",
+    purl = "pkg:generic/metadata_repo_tests@0.0.0",
+)
+
 filegroup(
     name = "all_external",
+    applicable_licenses = [":tests_metadata"],
     srcs = [
         "@failureaccess//jar",
         "@git_commit//:srcs",
@@ -246,7 +253,6 @@ filegroup(
 
 sbom(
     name = "all_sbom",
-    require_root_metadata = False,
     target = ":all_external",
 )
 
