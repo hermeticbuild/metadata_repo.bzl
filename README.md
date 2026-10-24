@@ -23,6 +23,36 @@ http_archive(
 
 Requires Bazel 8.0.0 or newer.
 
+For the `zlib` repository above, the generated targets can be inspected with:
+
+```
+bazel query --output build '@zlib//:package_metadata + @zlib//:package_metadata_integrity'
+```
+
+which prints (location comments and `generator_*` attributes omitted):
+
+```starlark
+_package_metadata(
+  name = "package_metadata",
+  visibility = ["//visibility:public"],
+  package_metadata = [],
+  attributes = ["@zlib//:package_metadata_integrity"],
+  purl = "pkg:generic/zlib@1.3.1?checksum=sha256:9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23&download_url=https:%2F%2Fgithub.com%2Fmadler%2Fzlib%2Freleases%2Fdownload%2Fv1.3.1%2Fzlib-1.3.1.tar.gz&file_name=zlib-1.3.1.tar.gz",
+)
+_integrity(
+  name = "package_metadata_integrity",
+  visibility = ["//visibility:public"],
+  package_metadata = [],
+  values = ["sha256-mpOyt9/ax3zrpaVYpYDnRmfdb+3kWFuR7vtg8Dty3yM="],
+)
+```
+
+The generated `REPO.bazel` is:
+
+```starlark
+repo(default_package_metadata = ["//:package_metadata"])
+```
+
 ## Generated targets
 
 Every repository gets, in its root package:
