@@ -178,7 +178,7 @@ def _merge_qualifiers(base, added):
     for key, value in added.items():
         if value != None and value != "":
             qualifiers[key] = value
-    return qualifiers if qualifiers else None
+    return qualifiers
 
 def _common_qualifiers(
         *,
@@ -187,15 +187,13 @@ def _common_qualifiers(
         download_url,
         file_name,
         repository_url,
-        vcs_url,
-        vers):
+        vcs_url):
     return {
         "checksum": _checksum_qualifier(sha256 = sha256, integrity = integrity),
         "download_url": download_url,
         "file_name": file_name,
         "repository_url": repository_url,
         "vcs_url": vcs_url,
-        "vers": vers,
     }
 
 def _archive_attrs():
@@ -269,11 +267,17 @@ def _build_purl_from_parts(parts):
         builder = builder.namespace(parts["namespace"])
     if parts.get("version"):
         builder = builder.version(parts["version"])
-    for key, value in sorted((parts.get("qualifiers") or {}).items()):
+    for key, value in sorted(parts["qualifiers"].items()):
         builder = builder.add_qualifier(key, value)
     if parts.get("subpath"):
         builder = builder.subpath(parts["subpath"])
     return builder.build()
+
+def vers_version_conflict(version, qualifiers):
+    """Returns an error message if the PURL has both a version and a vers qualifier, else None."""
+    if version and "vers" in qualifiers:
+        return "The 'vers' qualifier is mutually exclusive with the PURL version component (see https://github.com/package-url/purl-spec/blob/main/docs/specification/common-qualifiers.md); set either 'version' or a 'vers' qualifier, not both"
+    return None
 
 def build_metadata_purl(
         *,
@@ -287,7 +291,6 @@ def build_metadata_purl(
         file_name = None,
         repository_url = None,
         vcs_url = None,
-        vers = None,
         qualifiers = {}):
     """Builds a canonical PURL with common qualifiers added.
 
@@ -306,9 +309,6 @@ def build_metadata_purl(
     if err:
         fail("Invalid purl_pattern after expansion: {}".format(err))
 
-    if parsed.get("version") and vers:
-        fail("The 'vers' qualifier is mutually exclusive with the PURL version component")
-
     added_qualifiers = _common_qualifiers(
         sha256 = sha256,
         integrity = integrity,
@@ -316,10 +316,12 @@ def build_metadata_purl(
         file_name = file_name,
         repository_url = repository_url,
         vcs_url = vcs_url,
-        vers = vers,
     )
     added_qualifiers.update(qualifiers)
     parsed["qualifiers"] = _merge_qualifiers(parsed.get("qualifiers"), added_qualifiers)
+    conflict = vers_version_conflict(parsed.get("version"), parsed["qualifiers"])
+    if conflict:
+        fail(conflict)
 
     return _build_purl_from_parts(parsed)
 
@@ -348,10 +350,8 @@ def _ctx_replacements(ctx):
 def _ctx_integrity_values(ctx):
     return integrity_values(sha256 = ctx.attr.sha256, integrity = ctx.attr.integrity)
 
-def _metadata_purl(ctx, urls, output_name = None):
-    replacements = _ctx_replacements(ctx)
-    download_url = _replace_tokens(ctx.attr.download_url, replacements) if ctx.attr.download_url else _first_url(urls)
-    file_name = _replace_tokens(ctx.attr.file_name, replacements) if ctx.attr.file_name else output_name or _basename(download_url)
+def _metadata_purl(ctx, urls):
+    download_url = _first_url(urls)
     return build_metadata_purl(
         name = ctx.name,
         version = ctx.attr.version,
@@ -360,10 +360,7 @@ def _metadata_purl(ctx, urls, output_name = None):
         integrity = ctx.attr.integrity,
         substitutions = ctx.attr.substitutions,
         download_url = download_url,
-        file_name = file_name,
-        repository_url = _replace_tokens(ctx.attr.repository_url, replacements),
-        vcs_url = _replace_tokens(ctx.attr.vcs_url, replacements),
-        vers = _replace_tokens(ctx.attr.vers, replacements),
+        file_name = _basename(download_url),
         qualifiers = ctx.attr.qualifiers,
     )
 
@@ -625,12 +622,6 @@ _COMMON_ATTRS = {
     "build_file_content": attr.string(
         doc = "BUILD file content for the extracted repository. The package_metadata target is appended.",
     ),
-    "download_url": attr.string(
-        doc = "Optional direct package download URL qualifier. Defaults to the first resolved download URL.",
-    ),
-    "file_name": attr.string(
-        doc = "Optional file_name qualifier. Defaults to the downloaded file name when it can be derived.",
-    ),
     "integrity": attr.string(
         doc = "Artifact checksum in Subresource Integrity format. Mutually exclusive with sha256. Converted to the PURL checksum qualifier as '<algorithm>:<hex digest>'.",
     ),
@@ -659,10 +650,7 @@ _COMMON_ATTRS = {
         doc = "PURL pattern. Supports built-in placeholders such as {name}, {version}, {sha256}, and {integrity}. Common qualifiers are merged after parsing.",
     ),
     "qualifiers": attr.string_dict(
-        doc = "Additional PURL qualifiers to merge into the parsed PURL.",
-    ),
-    "repository_url": attr.string(
-        doc = "Optional repository_url common qualifier.",
+        doc = "Additional PURL qualifiers merged into the parsed PURL. They take precedence over the derived download_url (first URL) and file_name (its basename) qualifiers.",
     ),
     "remote_patches": attr.string_dict(
         doc = "Map of remote patch URL to integrity value, matching native http_archive.",
@@ -673,12 +661,6 @@ _COMMON_ATTRS = {
     ),
     "urls": attr.string_list(
         doc = "Download URL patterns. Supports placeholders. Takes precedence over url_pattern.",
-    ),
-    "vcs_url": attr.string(
-        doc = "Optional vcs_url common qualifier.",
-    ),
-    "vers": attr.string(
-        doc = "Optional vers common qualifier. Mutually exclusive with the PURL version component.",
     ),
     "version": attr.string(
         doc = "Optional version used to expand url_pattern, urls, strip_prefix, and purl_pattern.",

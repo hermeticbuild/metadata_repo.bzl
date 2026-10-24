@@ -174,14 +174,12 @@ def _git_repository_impl(ctx):
         "{version}": ctx.attr.version,
     }
     replacements.update(ctx.attr.substitutions)
-    vcs_url = _replace_tokens(ctx.attr.vcs_url, replacements) if ctx.attr.vcs_url else build_vcs_url(ctx.attr.remote, commit)
+    vcs_url = build_vcs_url(ctx.attr.remote, commit)
     metadata_purl = build_metadata_purl(
         name = ctx.name,
         version = ctx.attr.version,
         purl_pattern = _replace_tokens(ctx.attr.purl_pattern, replacements),
         vcs_url = vcs_url,
-        repository_url = _replace_tokens(ctx.attr.repository_url, replacements),
-        vers = _replace_tokens(ctx.attr.vers, replacements),
         qualifiers = ctx.attr.qualifiers,
     )
     ctx.file("BUILD.bazel", build_file_with_package_metadata(metadata_purl, _read_build_file_content(ctx), license = ctx.attr.license))
@@ -237,7 +235,7 @@ _GIT_ATTRS = {
     ),
     "purl_pattern": attr.string(
         mandatory = True,
-        doc = "PURL pattern. Supports {name}, {version}, and {commit} (the resolved commit), plus keys from substitutions. Common qualifiers are merged after parsing; vcs_url defaults to the remote at the resolved commit.",
+        doc = "PURL pattern. Supports {name}, {version}, and {commit} (the resolved commit), plus keys from substitutions. Common qualifiers are merged after parsing; the vcs_url qualifier is git+<remote>@<resolved commit>; override it through qualifiers.",
     ),
     "qualifiers": attr.string_dict(
         doc = "Additional PURL qualifiers to merge into the parsed PURL.",
@@ -261,9 +259,6 @@ _GIT_ATTRS = {
     "remote_patches": attr.string_dict(
         doc = "Map of remote patch URL to integrity value, matching native git_repository.",
     ),
-    "repository_url": attr.string(
-        doc = "Optional repository_url common qualifier.",
-    ),
     "shallow_since": attr.string(
         doc = "Optional date, not after the specified commit, enabling a shallow clone. Not recommended; see native git_repository.",
     ),
@@ -277,16 +272,10 @@ _GIT_ATTRS = {
         doc = "Directory prefix to strip from the checked out files, matching native git_repository.",
     ),
     "substitutions": attr.string_dict(
-        doc = "Additional literal replacements used by purl_pattern, vcs_url, repository_url and vers. Keys are replaced as-is.",
+        doc = "Additional literal replacements used by purl_pattern, tag and branch. Keys are replaced as-is.",
     ),
     "tag": attr.string(
         doc = "Tag to check out. Supports {name}, {version} and keys from substitutions, for example v{version}. At most one of branch, tag, or commit may be specified.",
-    ),
-    "vcs_url": attr.string(
-        doc = "Overrides the vcs_url common qualifier, which otherwise defaults to git+<remote>@<resolved commit>.",
-    ),
-    "vers": attr.string(
-        doc = "Optional vers common qualifier. Mutually exclusive with the PURL version component.",
     ),
     "verbose": attr.bool(),
     "version": attr.string(

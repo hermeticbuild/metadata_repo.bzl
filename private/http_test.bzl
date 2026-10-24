@@ -11,6 +11,7 @@ load(
     "integrity_values",
     "build_metadata_purl",
     "repo_file_with_package_metadata",
+    "vers_version_conflict",
 )
 
 def _test_impl(ctx):
@@ -26,17 +27,6 @@ def _test_impl(ctx):
         vcs_url = "git+https://github.com/madler/zlib.git",
     )
     expected = "pkg:generic/zlib@1.3.1?checksum=sha256:38ef96b8d0a7d57784f7f444b587d7c4f9c931b6d4f3f3d8e8f4b4e4adf3f8b8&download_url=https:%2F%2Fzlib.net%2Fzlib-1.3.1.tar.gz&file_name=zlib-1.3.1.tar.gz&repository_url=https:%2F%2Fzlib.net&vcs_url=git%2Bhttps:%2F%2Fgithub.com%2Fmadler%2Fzlib.git"
-    if actual != expected:
-        failures.append("expected {}, got {}".format(expected, actual))
-
-    actual = build_metadata_purl(
-        name = "requests",
-        version = "",
-        sha256 = "0123456789abcdef",
-        purl_pattern = "pkg:pypi/requests",
-        vers = "vers:pypi/>=2.0.0|<3.0.0",
-    )
-    expected = "pkg:pypi/requests?checksum=sha256:0123456789abcdef&vers=vers:pypi%2F%3E%3D2.0.0%7C%3C3.0.0"
     if actual != expected:
         failures.append("expected {}, got {}".format(expected, actual))
 
@@ -157,6 +147,16 @@ def _test_impl(ctx):
     expected = "pkg:github/a/b@abc?vcs_url=git%2Bhttps:%2F%2Fgithub.com%2Fa%2Fb.git%40abc"
     if actual != expected:
         failures.append("expected {}, got {}".format(expected, actual))
+
+    for version, qualifiers, expect_conflict in [
+        ("1.0.0", {"vers": "vers:semver/>=1.0.0"}, True),
+        ("", {"vers": "vers:semver/>=1.0.0"}, False),
+        ("1.0.0", {"arch": "any"}, False),
+        ("", {}, False),
+    ]:
+        conflict = vers_version_conflict(version, qualifiers)
+        if bool(conflict) != expect_conflict:
+            failures.append("vers_version_conflict({}, {}) returned {}".format(version, qualifiers, conflict))
 
     repo_file = repo_file_with_package_metadata()
     expected_repo_file = """repo(default_package_metadata = ["//:package_metadata"])

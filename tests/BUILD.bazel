@@ -66,12 +66,10 @@ metadata_test(
 )
 
 metadata_test(
-    name = "skylib_vers_metadata_test",
-    repo = "skylib_vers",
+    name = "skylib_unversioned_metadata_test",
+    repo = "skylib_unversioned",
     expect = [
         "pkg:generic/skylib?checksum=sha256:" + SKYLIB_SHA256,
-        "vers=vers:semver%2F%3E%3D1.8.0%7C%3C2.0.0",
-        # no version component when vers is used
         "!skylib@",
     ],
 )

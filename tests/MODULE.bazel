@@ -208,15 +208,17 @@ native_archive(
     url = SKYLIB_URL,
 )
 
-# PURL options: qualifiers, repository_url, overrides and substitutions
+# PURL options: qualifiers (including overrides) and substitutions
 ours_archive(
     name = "skylib_purl",
     build_file_content = BUILD_FILE_CONTENT,
-    download_url = "https://mirror.example.com/skylib.tar.gz",
-    file_name = "custom-name.tgz",
     purl_pattern = "pkg:github/{owner}/{repo}@{version}",
-    qualifiers = {"arch": "any"},
-    repository_url = "https://repo.example.com/{owner}",
+    qualifiers = {
+        "arch": "any",
+        "download_url": "https://mirror.example.com/skylib.tar.gz",
+        "file_name": "custom-name.tgz",
+        "repository_url": "https://repo.example.com/bazelbuild",
+    },
     sha256 = SKYLIB_SHA256,
     substitutions = {
         "{owner}": "bazelbuild",
@@ -226,14 +228,13 @@ ours_archive(
     version = "1.8.2",
 )
 
-# vers qualifier without a version component
+# no version at all
 ours_archive(
-    name = "skylib_vers",
+    name = "skylib_unversioned",
     build_file_content = BUILD_FILE_CONTENT,
     purl_pattern = "pkg:generic/skylib",
     sha256 = SKYLIB_SHA256,
     url = SKYLIB_URL,
-    vers = "vers:semver/>=1.8.0|<2.0.0",
 )
 
 # files overlay: only supported by our rule
