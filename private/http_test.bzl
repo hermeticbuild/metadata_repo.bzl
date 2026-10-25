@@ -8,6 +8,9 @@ load(
     "build_http_file_root_package",
     "build_http_jar_package",
     "build_http_jar_root_package",
+    "effective_integrity",
+    "integrities_error",
+    "integrity_error",
     "integrity_values",
     "build_metadata_purl",
     "repo_file_with_package_metadata",
@@ -103,11 +106,57 @@ def _test_impl(ctx):
         ({"sha256": "00"}, ["sha256-AA=="]),
         ({"sha256": "0001"}, ["sha256-AAE="]),
         ({"sha256": "000102"}, ["sha256-AAEC"]),
-        ({"integrity": "sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU= sha512-AAAA"}, ["sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=", "sha512-AAAA"]),
+        ({"integrity": "sha512-AAAA"}, ["sha512-AAAA"]),
     ]:
         actual = integrity_values(sha256 = kwargs.get("sha256", ""), integrity = kwargs.get("integrity", ""))
         if actual != expected_values:
             failures.append("expected integrity values {}, got {}".format(expected_values, actual))
+
+    for integrity, valid in [
+        ("", True),
+        ("sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=", True),
+        ("sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU= sha512-AAAA", False),
+    ]:
+        if (integrity_error(integrity) == None) != valid:
+            failures.append("unexpected integrity_error result for '{}'".format(integrity))
+
+    sri_sha256 = "sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="
+    sri_sha384 = "sha384-OLBgp1GsljhM2TJ+sbHjaiH9txEUvgdDTAzHv2P24donTt6/529l+9Ua0vFImLlb"
+    for integrities, valid in [
+        ([], True),
+        ([sri_sha256, sri_sha384], True),
+        (["md5-AAAA", sri_sha256], True),
+        ([sri_sha256, "sha256-AAAA"], False),
+        (["md5-AAAA"], False),
+        (["noalgorithm"], False),
+        ([sri_sha256 + " " + sri_sha384], False),
+    ]:
+        if (integrities_error(integrities) == None) != valid:
+            failures.append("unexpected integrities_error result for {}".format(integrities))
+
+    for integrity, integrities, expected in [
+        ("", [], ""),
+        (sri_sha256, [], sri_sha256),
+        ("", ["md5-AAAA", sri_sha384, sri_sha256], sri_sha384),
+    ]:
+        actual = effective_integrity(integrity, integrities)
+        if actual != expected:
+            failures.append("expected effective integrity {}, got {}".format(expected, actual))
+
+    actual = integrity_values(sha256 = "", integrity = "", integrities = [sri_sha256, sri_sha384])
+    if actual != [sri_sha256, sri_sha384]:
+        failures.append("expected integrities passthrough, got {}".format(actual))
+
+    # Multiple checksums are comma-separated; the purl builder percent-encodes the comma.
+    actual = build_metadata_purl(
+        name = "multi",
+        version = "1",
+        purl_pattern = "pkg:generic/multi@{version}?integrity={integrity}",
+        integrities = ["md5-AAAA", sri_sha384, sri_sha256],
+    )
+    expected = "pkg:generic/multi@1?checksum=md5:000000%2Csha384:38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b%2Csha256:" + empty_sha256 + "&integrity=" + sri_sha384.replace("+", "%2B").replace("/", "%2F")
+    if actual != expected:
+        failures.append("expected {}, got {}".format(expected, actual))
 
     values = ["sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="]
     for name, generated in [

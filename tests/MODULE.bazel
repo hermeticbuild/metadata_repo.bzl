@@ -119,6 +119,21 @@ native_archive(
     url = ZLIB_TGZ_URL.format(version = ZLIB_VERSION),
 )
 
+# integrities: several algorithms; the first one Bazel supports (sha512) is verified
+ours_archive(
+    name = "zlib_integrities",
+    build_file_content = BUILD_FILE_CONTENT,
+    integrities = [
+        "md5-AAAA",
+        "sha512-WAZ3qtlwk4KQkNS2BayBxQMn50psLeC4XdLoUlVT893eF1VupG+PAH+J5DVJPJogvJl9HvHBwsIydFKOPEa5Tw==",
+        "sha256-" + "mpOyt9/ax3zrpaVYpYDnRmfdb+3kWFuR7vtg8Dty3yM=",
+    ],
+    purl_pattern = "pkg:generic/zlib@{version}",
+    strip_prefix = "zlib-{version}",
+    url = ZLIB_TGZ_URL,
+    version = ZLIB_VERSION,
+)
+
 # zip + SRI integrity + urls list with a failing mirror first + explicit type
 ours_archive(
     name = "zlib_zip",

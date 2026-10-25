@@ -78,6 +78,7 @@ Every repository gets, in its root package:
 | `substitutions` | all | Extra `{token}` replacements. |
 | `qualifiers` | all | Extra PURL qualifiers. They override the derived ones, for example `{"download_url": "https://mirror/x.tgz"}`. |
 | `url_pattern` | HTTP rules | URL template with tokens. |
+| `integrities` | HTTP rules | List of SRI checksums, one per algorithm (extension over the built-in rules, which only accept one `integrity`). Mutually exclusive with `sha256` and `integrity`; algorithms must be unique. Any algorithm may be listed (once each), but **Bazel only verifies the first entry whose algorithm it supports** (`sha1`, `sha256`, `sha384`, `sha512`, `blake3`) and the rule fails if none is supported; the other entries are not verified, they are only recorded. All entries populate the `checksum` PURL qualifier (comma-separated) and the `integrity()` target. `{integrity}` expands to the entry passed to Bazel. |
 | `license` | all | Label of a `license()` target (from `@package_metadata//licenses`), added to the `attributes` of the generated `:package_metadata`. Resolved from your module, so the repo defining it needs a `bazel_dep`. |
 | `files` | `http_archive` | Overlay files into the repository (not in native Bazel 9). |
 

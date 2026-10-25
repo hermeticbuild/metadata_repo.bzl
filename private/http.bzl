@@ -93,16 +93,54 @@ def _base64_to_hex(value):
             output.append(_byte_to_hex((buffer // _POW2[bits]) % 256))
     return "".join(output)
 
+def integrity_error(integrity):
+    """Returns an error message if integrity is not a single SRI value, like the built-in rules require."""
+    if integrity and (" " in integrity.strip() or "," in integrity):
+        return "Invalid integrity value '{}': exactly one '<algorithm>-<base64 digest>' value is supported, like the built-in repository rules".format(integrity)
+    return None
+
+# Algorithms accepted by Bazel's downloader for Subresource Integrity values.
+_BAZEL_INTEGRITY_ALGORITHMS = ["sha1", "sha256", "sha384", "sha512", "blake3"]
+
+def _integrity_algorithm(integrity):
+    return integrity.split("-")[0].lower()
+
+def integrities_error(integrities):
+    """Returns an error message if integrities is invalid, else None.
+
+    Each entry must be a single SRI value, algorithms must be unique, and at
+    least one algorithm must be supported by Bazel since that entry is passed
+    to the downloader.
+    """
+    seen = {}
+    for value in integrities:
+        error = integrity_error(value)
+        if error:
+            return error
+        if "-" not in value:
+            return "Invalid integrities entry '{}': expected '<algorithm>-<base64 digest>'".format(value)
+        algorithm = _integrity_algorithm(value)
+        if algorithm in seen:
+            return "Duplicate '{}' algorithm in integrities".format(algorithm)
+        seen[algorithm] = True
+    if integrities and not [a for a in seen if a in _BAZEL_INTEGRITY_ALGORITHMS]:
+        return "None of the integrities uses an algorithm supported by Bazel ({}); at least one is required for the download".format(", ".join(_BAZEL_INTEGRITY_ALGORITHMS))
+    return None
+
+def effective_integrity(integrity, integrities):
+    """Returns the integrity value passed to Bazel's downloader: 'integrity' or the first supported 'integrities' entry."""
+    if integrity:
+        return integrity
+    for value in integrities:
+        if _integrity_algorithm(value) in _BAZEL_INTEGRITY_ALGORITHMS:
+            return value
+    return ""
+
 def _integrity_to_checksum_qualifier(integrity):
-    checksums = []
-    for item in integrity.split(" "):
-        if not item:
-            continue
-        parts = item.split("-")
-        if len(parts) != 2:
-            fail("Invalid integrity value '{}': expected '<algorithm>-<base64 digest>'".format(item))
-        checksums.append("{}:{}".format(parts[0].lower(), _base64_to_hex(parts[1])))
-    return ",".join(checksums) if checksums else None
+    parts = integrity.split("-")
+    if len(parts) != 2:
+        fail("Invalid integrity value '{}': expected '<algorithm>-<base64 digest>'".format(integrity))
+    return "{}:{}".format(parts[0].lower(), _base64_to_hex(parts[1]))
 
 _BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
@@ -127,13 +165,17 @@ def _hex_to_base64(value):
         output.append(_BASE64_ALPHABET[n % 64] if len(chunk) > 2 else "=")
     return "".join(output)
 
-def integrity_values(*, sha256, integrity):
+def integrity_values(*, sha256, integrity, integrities = []):
     """Returns the artifact checksums as a list of SRI strings."""
+    if integrities:
+        return list(integrities)
     if sha256:
         return ["sha256-{}".format(_hex_to_base64(sha256))]
-    return [item for item in integrity.split(" ") if item]
+    return [integrity] if integrity else []
 
-def _checksum_qualifier(*, sha256, integrity):
+def _checksum_qualifier(*, sha256, integrity, integrities = []):
+    if integrities:
+        return ",".join([_integrity_to_checksum_qualifier(value) for value in integrities])
     if sha256 and integrity:
         fail("Only one of 'sha256' or 'integrity' may be specified")
     if sha256:
@@ -142,9 +184,14 @@ def _checksum_qualifier(*, sha256, integrity):
         return _integrity_to_checksum_qualifier(integrity)
     return None
 
-def _verify_checksum_attrs(*, sha256, integrity):
-    if not sha256 and not integrity:
-        fail("One of 'sha256' or 'integrity' must be specified")
+def verify_checksum_attrs(*, sha256, integrity, integrities = []):
+    if integrities and (sha256 or integrity):
+        fail("'integrities' is mutually exclusive with 'sha256' and 'integrity'")
+    error = integrity_error(integrity) or integrities_error(integrities)
+    if error:
+        fail(error)
+    if not sha256 and not integrity and not integrities:
+        fail("One of 'sha256', 'integrity' or 'integrities' must be specified")
     if sha256 and integrity:
         fail("Only one of 'sha256' or 'integrity' may be specified")
 
@@ -184,12 +231,13 @@ def _common_qualifiers(
         *,
         sha256,
         integrity,
+        integrities,
         download_url,
         file_name,
         repository_url,
         vcs_url):
     return {
-        "checksum": _checksum_qualifier(sha256 = sha256, integrity = integrity),
+        "checksum": _checksum_qualifier(sha256 = sha256, integrity = integrity, integrities = integrities),
         "download_url": download_url,
         "file_name": file_name,
         "repository_url": repository_url,
@@ -286,6 +334,7 @@ def build_metadata_purl(
         purl_pattern,
         sha256 = "",
         integrity = "",
+        integrities = [],
         substitutions = {},
         download_url = None,
         file_name = None,
@@ -301,7 +350,7 @@ def build_metadata_purl(
         name = name,
         version = version,
         sha256 = sha256,
-        integrity = integrity,
+        integrity = effective_integrity(integrity, integrities),
         substitutions = substitutions,
     )
     rendered_purl = _replace_tokens(purl_pattern, replacements)
@@ -312,6 +361,7 @@ def build_metadata_purl(
     added_qualifiers = _common_qualifiers(
         sha256 = sha256,
         integrity = integrity,
+        integrities = integrities,
         download_url = download_url,
         file_name = file_name,
         repository_url = repository_url,
@@ -343,12 +393,15 @@ def _ctx_replacements(ctx):
         name = ctx.name,
         version = ctx.attr.version,
         sha256 = ctx.attr.sha256,
-        integrity = ctx.attr.integrity,
+        integrity = effective_integrity(ctx.attr.integrity, ctx.attr.integrities),
         substitutions = ctx.attr.substitutions,
     )
 
 def _ctx_integrity_values(ctx):
-    return integrity_values(sha256 = ctx.attr.sha256, integrity = ctx.attr.integrity)
+    return integrity_values(sha256 = ctx.attr.sha256, integrity = ctx.attr.integrity, integrities = ctx.attr.integrities)
+
+def _download_integrity(ctx):
+    return effective_integrity(ctx.attr.integrity, ctx.attr.integrities)
 
 def _metadata_purl(ctx, urls):
     download_url = _first_url(urls)
@@ -358,6 +411,7 @@ def _metadata_purl(ctx, urls):
         purl_pattern = ctx.attr.purl_pattern,
         sha256 = ctx.attr.sha256,
         integrity = ctx.attr.integrity,
+        integrities = ctx.attr.integrities,
         substitutions = ctx.attr.substitutions,
         download_url = download_url,
         file_name = _basename(download_url),
@@ -533,7 +587,7 @@ def _validate_http_file_downloaded_file_path(ctx, downloaded_file_path):
         fail("'{}' cannot be used as downloaded_file_path in http_file".format(ctx.attr.downloaded_file_path))
 
 def _http_archive_impl(ctx):
-    _verify_checksum_attrs(sha256 = ctx.attr.sha256, integrity = ctx.attr.integrity)
+    verify_checksum_attrs(sha256 = ctx.attr.sha256, integrity = ctx.attr.integrity, integrities = ctx.attr.integrities)
     if ctx.attr.strip_prefix and ctx.attr.strip_components:
         fail("Only one of 'strip_prefix' and 'strip_components' may be specified")
     urls = _urls(ctx)
@@ -544,7 +598,7 @@ def _http_archive_impl(ctx):
         url = urls,
         output = ctx.attr.add_prefix,
         sha256 = ctx.attr.sha256,
-        integrity = ctx.attr.integrity,
+        integrity = _download_integrity(ctx),
         stripPrefix = strip_prefix,
         type = ctx.attr.type,
         canonical_id = canonical_id,
@@ -560,7 +614,7 @@ def _http_archive_impl(ctx):
     symlink_files(ctx)
 
 def _http_file_impl(ctx):
-    _verify_checksum_attrs(sha256 = ctx.attr.sha256, integrity = ctx.attr.integrity)
+    verify_checksum_attrs(sha256 = ctx.attr.sha256, integrity = ctx.attr.integrity, integrities = ctx.attr.integrities)
     urls = _urls(ctx)
     downloaded_file_path = ctx.attr.downloaded_file_path
     _validate_http_file_downloaded_file_path(ctx, downloaded_file_path)
@@ -568,7 +622,7 @@ def _http_file_impl(ctx):
         url = urls,
         output = "file/" + downloaded_file_path,
         sha256 = ctx.attr.sha256,
-        integrity = ctx.attr.integrity,
+        integrity = _download_integrity(ctx),
         executable = ctx.attr.executable,
         canonical_id = ctx.attr.canonical_id or get_default_canonical_id(ctx, urls),
         auth = get_auth(ctx, urls),
@@ -581,7 +635,7 @@ def _http_file_impl(ctx):
     ctx.file("REPO.bazel", repo_file_with_package_metadata())
 
 def _http_jar_impl(ctx):
-    _verify_checksum_attrs(sha256 = ctx.attr.sha256, integrity = ctx.attr.integrity)
+    verify_checksum_attrs(sha256 = ctx.attr.sha256, integrity = ctx.attr.integrity, integrities = ctx.attr.integrities)
     urls = _urls(ctx)
     for url in urls:
         if not url.split("?")[0].split("#")[0].endswith(".jar"):
@@ -593,7 +647,7 @@ def _http_jar_impl(ctx):
         url = urls,
         output = "jar/" + downloaded_file_name,
         sha256 = ctx.attr.sha256,
-        integrity = ctx.attr.integrity,
+        integrity = _download_integrity(ctx),
         canonical_id = ctx.attr.canonical_id or get_default_canonical_id(ctx, urls),
         auth = get_auth(ctx, urls),
     )
@@ -623,10 +677,13 @@ _COMMON_ATTRS = {
         doc = "BUILD file content for the extracted repository. The package_metadata target is appended.",
     ),
     "integrity": attr.string(
-        doc = "Artifact checksum in Subresource Integrity format. Mutually exclusive with sha256. Converted to the PURL checksum qualifier as '<algorithm>:<hex digest>'.",
+        doc = "Artifact checksum in Subresource Integrity format. Mutually exclusive with sha256 and integrities. Converted to the PURL checksum qualifier as '<algorithm>:<hex digest>'.",
+    ),
+    "integrities": attr.string_list(
+        doc = "Artifact checksums in Subresource Integrity format, one per algorithm (extension over the built-in rules). Mutually exclusive with sha256 and integrity. Any algorithm may be listed, but each only once. Only the first entry whose algorithm Bazel supports (sha1, sha256, sha384, sha512, blake3) is passed to the downloader and therefore verified; the others are not verified by Bazel. Fails if no entry uses a supported algorithm. All entries populate the PURL checksum qualifier (comma-separated) and the integrity() target.",
     ),
     "sha256": attr.string(
-        doc = "Artifact SHA-256 checksum as raw hex. Mutually exclusive with integrity. Added to the PURL checksum qualifier as 'sha256:<hex>'.",
+        doc = "Artifact SHA-256 checksum as raw hex. Mutually exclusive with integrity and integrities. Added to the PURL checksum qualifier as 'sha256:<hex>'.",
     ),
     "substitutions": attr.string_dict(
         doc = "Additional literal replacements used by url_pattern, urls, strip_prefix, and purl_pattern. Keys are replaced as-is. Built-ins are {name}, {version}, {sha256}, and {integrity}.",

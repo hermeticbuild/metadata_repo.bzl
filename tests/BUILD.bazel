@@ -36,6 +36,19 @@ metadata_test(
 )
 
 metadata_test(
+    name = "zlib_integrities_metadata_test",
+    repo = "zlib_integrities",
+    expect = [
+        # all entries, in order, are comma-separated (percent-encoded) in the checksum qualifier
+        "checksum=md5:000000%2Csha512:",
+        "%2Csha256:" + ZLIB_TGZ_SHA256,
+        "md5-AAAA",
+        "sha512-WAZ3qtlwk4KQkNS2BayBxQMn50psLeC4XdLoUlVT893eF1VupG+PAH+J5DVJPJogvJl9HvHBwsIydFKOPEa5Tw==",
+        ZLIB_TGZ_SRI,
+    ],
+)
+
+metadata_test(
     name = "zlib_zip_metadata_test",
     repo = "zlib_zip",
     expect = [
